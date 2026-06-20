@@ -123,11 +123,33 @@ class TrainingArguments:
     )
     profiler_activities: str = field(
         default="auto",
-        metadata={"help": "Profiler activities to collect: auto, all, cpu, or device."},
+        metadata={"help": "Profiler activities to collect. Choices: auto, all, cpu, device."},
     )
     profiler_rank_mode: str = field(
         default="all",
-        metadata={"help": "Profiler rank collection mode: all or rank0."},
+        metadata={"help": "Profiler rank collection mode. Choices: all, rank0."},
+    )
+    profiler_level: str = field(
+        default="level0",
+        metadata={"help": "NPU profiler collection level. Choices: none, level0, level1, level2."},
+    )
+    profiler_aic_metrics: str = field(
+        default="auto",
+        metadata={
+            "help": (
+                "NPU AI Core metric: auto, none, pipe_utilization, arithmetic_utilization, memory, "
+                "memory_l0, memory_ub, l2_cache, memory_access, or resource_conflict_ratio."
+            )
+        },
+    )
+    profiler_backend_options: dict | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "Backend-specific profiler mapping. Currently supports npu.data_simplification, npu.host_sys, "
+                "npu.sys_io, npu.sys_interconnection, and npu.gc_detect_threshold."
+            )
+        },
     )
     dist_config: PluginConfig | None = field(
         default=None,

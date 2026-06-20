@@ -25,6 +25,37 @@ from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
 _SUPPORTED_ACTIVITIES = {"auto", "all", "cpu", "device"}
 _SUPPORTED_RANK_MODES = {"all", "rank0"}
+_NPU_PROFILER_LEVELS = {
+    "none": "Level_none",
+    "level0": "Level0",
+    "level1": "Level1",
+    "level2": "Level2",
+}
+_NPU_AIC_METRICS = {
+    "none": "AiCoreNone",
+    "pipe_utilization": "PipeUtilization",
+    "arithmetic_utilization": "ArithmeticUtilization",
+    "memory": "Memory",
+    "memory_l0": "MemoryL0",
+    "memory_ub": "MemoryUB",
+    "l2_cache": "L2Cache",
+    "memory_access": "MemoryAccess",
+    "resource_conflict_ratio": "ResourceConflictRatio",
+}
+_NPU_HOST_SYS = {
+    "cpu": "CPU",
+    "mem": "MEM",
+    "disk": "DISK",
+    "network": "NETWORK",
+    "osrt": "OSRT",
+}
+_NPU_BACKEND_OPTIONS = {
+    "data_simplification",
+    "host_sys",
+    "sys_io",
+    "sys_interconnection",
+    "gc_detect_threshold",
+}
 
 
 @dataclass
@@ -43,6 +74,9 @@ class ProfilerConfig:
     with_modules: bool = False
     activities: str = "auto"
     rank_mode: str = "all"
+    level: str = "level0"
+    aic_metrics: str = "auto"
+    backend_options: Optional[dict[str, Any]] = None
     deprecated_alias_present: bool = False
     legacy_defaults_enabled: bool = False
     explicit_profile_kwargs: Optional[set[str]] = None
@@ -79,6 +113,9 @@ class ProfilerConfig:
             with_modules=getattr(args, "profiler_with_modules", False),
             activities=getattr(args, "profiler_activities", "auto"),
             rank_mode=getattr(args, "profiler_rank_mode", "all"),
+            level=getattr(args, "profiler_level", "level0"),
+            aic_metrics=getattr(args, "profiler_aic_metrics", "auto"),
+            backend_options=_parse_backend_options(getattr(args, "profiler_backend_options", None)),
             deprecated_alias_present=enable_torch_profiler,
             legacy_defaults_enabled=legacy_defaults_enabled,
             explicit_profile_kwargs=explicit_profile_kwargs,
@@ -93,12 +130,84 @@ class ProfilerConfig:
         _validate_int_option("profiler_warmup_steps", self.warmup_steps, min_value=0)
         _validate_int_option("profiler_active_steps", self.active_steps, min_value=1)
         _validate_int_option("profiler_repeat", self.repeat, min_value=0)
-        if self.activities not in _SUPPORTED_ACTIVITIES:
-            raise ValueError(f"`profiler_activities` must be one of {sorted(_SUPPORTED_ACTIVITIES)}.")
-        if self.rank_mode not in _SUPPORTED_RANK_MODES:
-            raise ValueError(f"`profiler_rank_mode` must be one of {sorted(_SUPPORTED_RANK_MODES)}.")
+        _validate_choice_option("profiler_activities", self.activities, _SUPPORTED_ACTIVITIES)
+        _validate_choice_option("profiler_rank_mode", self.rank_mode, _SUPPORTED_RANK_MODES)
 
+        if backend_name == "npu" and self.activities != "cpu":
+            self.npu_profiler_level_name()
+            self.npu_aic_metrics_name()
+            self.npu_backend_options()
         self.schedule_kwargs()
+
+    def npu_profiler_level_name(self) -> str:
+        key = _validate_choice_option("profiler_level", self.level, _NPU_PROFILER_LEVELS)
+        return _NPU_PROFILER_LEVELS[key]
+
+    def npu_aic_metrics_name(self) -> str:
+        key = _validate_choice_option("profiler_aic_metrics", self.aic_metrics, {"auto", *_NPU_AIC_METRICS})
+        if key == "auto":
+            if self.npu_profiler_level_name() in ("Level1", "Level2"):
+                return "PipeUtilization"
+            return "AiCoreNone"
+
+        metric_name = _NPU_AIC_METRICS[key]
+        if metric_name != "AiCoreNone" and self.npu_profiler_level_name() not in ("Level1", "Level2"):
+            raise ValueError(
+                "`profiler_aic_metrics` requires `profiler_level` to be `level1` or `level2` on NPU."
+            )
+
+        return metric_name
+
+    def npu_backend_options(self) -> dict[str, Any]:
+        if self.backend_options is None:
+            return {}
+
+        unsupported_backends = set(self.backend_options) - {"npu"}
+        if unsupported_backends:
+            raise ValueError(f"`profiler_backend_options` only supports `npu`, got {sorted(unsupported_backends)}.")
+
+        if "npu" not in self.backend_options or self.backend_options["npu"] is None:
+            return {}
+
+        npu_options = self.backend_options["npu"]
+        if not isinstance(npu_options, dict):
+            raise ValueError("`profiler_backend_options.npu` must be a mapping.")
+
+        unsupported_options = set(npu_options) - _NPU_BACKEND_OPTIONS
+        if unsupported_options:
+            raise ValueError(
+                f"`profiler_backend_options.npu` only supports {sorted(_NPU_BACKEND_OPTIONS)}, "
+                f"got {sorted(unsupported_options)}."
+            )
+
+        normalized_options = dict(npu_options)
+        if "data_simplification" in normalized_options and not isinstance(
+            normalized_options["data_simplification"], bool
+        ):
+            raise ValueError("`profiler_backend_options.npu.data_simplification` must be a boolean.")
+        if "sys_io" in normalized_options and not isinstance(normalized_options["sys_io"], bool):
+            raise ValueError("`profiler_backend_options.npu.sys_io` must be a boolean.")
+        if "sys_interconnection" in normalized_options and not isinstance(
+            normalized_options["sys_interconnection"], bool
+        ):
+            raise ValueError("`profiler_backend_options.npu.sys_interconnection` must be a boolean.")
+        if normalized_options.get("gc_detect_threshold") is not None:
+            threshold = normalized_options["gc_detect_threshold"]
+            if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or threshold < 0:
+                raise ValueError("`profiler_backend_options.npu.gc_detect_threshold` must be null or >= 0.")
+
+        normalized_options["host_sys"] = _normalize_host_sys(normalized_options.get("host_sys", []))
+        return normalized_options
+
+    def explicit_npu_backend_options(self) -> set[str]:
+        if self.backend_options is None:
+            return set()
+
+        npu_options = self.backend_options.get("npu")
+        if not isinstance(npu_options, dict):
+            return set()
+
+        return set(npu_options)
 
     def schedule_kwargs(self) -> dict[str, int]:
         return dict(
@@ -145,27 +254,40 @@ class _ProfilerBackend:
             return None
 
         profiler = self.profiler_module
+        npu_options = config.npu_backend_options()
         config_kwargs = dict(
             export_type=[profiler.ExportType.Text],
-            profiler_level=_get_profiler_enum_value(profiler, "ProfilerLevel", "Level0", "`profiler_level`"),
-            aic_metrics=_get_profiler_enum_value(profiler, "AiCMetrics", "AiCoreNone", "`profiler_aic_metrics`"),
+            profiler_level=_get_profiler_enum_value(
+                profiler, "ProfilerLevel", config.npu_profiler_level_name(), "`profiler_level`"
+            ),
+            aic_metrics=_get_profiler_enum_value(
+                profiler, "AiCMetrics", config.npu_aic_metrics_name(), "`profiler_aic_metrics`"
+            ),
             l2_cache=False,
             op_attr=False,
-            data_simplification=True,
+            data_simplification=npu_options.get("data_simplification", True),
             record_op_args=False,
-            gc_detect_threshold=None,
-            host_sys=[],
-            sys_io=False,
-            sys_interconnection=False,
+            gc_detect_threshold=npu_options.get("gc_detect_threshold"),
+            host_sys=[
+                _get_profiler_enum_value(
+                    profiler, "HostSystem", item, "`profiler_backend_options.npu.host_sys`"
+                )
+                for item in npu_options.get("host_sys", [])
+            ],
+            sys_io=npu_options.get("sys_io", False),
+            sys_interconnection=npu_options.get("sys_interconnection", False),
             mstx=False,
             mstx_domain_include=[],
             mstx_domain_exclude=[],
         )
+        explicit_keys = {"profiler_level", "aic_metrics"}
+        explicit_keys.update(config.explicit_npu_backend_options())
         return profiler._ExperimentalConfig(
             **_filter_supported_kwargs(
                 profiler._ExperimentalConfig,
                 config_kwargs,
                 logger=logger,
+                explicit_keys=explicit_keys,
             )
         )
 
@@ -187,6 +309,16 @@ def _get_current_accelerator_type() -> str:
     return "cpu"
 
 
+def _parse_backend_options(options: Any) -> Optional[dict[str, Any]]:
+    if options is None:
+        return None
+
+    if not isinstance(options, dict):
+        raise ValueError("`profiler_backend_options` must be a mapping.")
+
+    return options
+
+
 def _resolve_optional_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
@@ -202,6 +334,13 @@ def _validate_int_option(name: str, value: Any, min_value: int) -> None:
         raise ValueError(f"`{name}` must be an integer greater than or equal to {min_value}.")
 
 
+def _validate_choice_option(name: str, value: Any, supported: set[str] | dict[str, Any]) -> str:
+    if not isinstance(value, str) or value not in supported:
+        raise ValueError(f"`{name}` must be one of {sorted(supported)}.")
+
+    return value
+
+
 def _get_explicit_profile_kwargs(**kwargs: Any) -> set[str]:
     name_mapping = {
         "record_shapes": "record_shapes",
@@ -209,6 +348,21 @@ def _get_explicit_profile_kwargs(**kwargs: Any) -> set[str]:
         "with_stack": "with_stack",
     }
     return {profile_key for arg_key, profile_key in name_mapping.items() if kwargs[arg_key] is not None}
+
+
+def _normalize_host_sys(host_sys: Any) -> list[str]:
+    if host_sys is None:
+        return []
+
+    if not isinstance(host_sys, list):
+        raise ValueError("`profiler_backend_options.npu.host_sys` must be a list.")
+
+    normalized = []
+    for item in host_sys:
+        key = _validate_choice_option("profiler_backend_options.npu.host_sys", item, _NPU_HOST_SYS)
+        normalized.append(_NPU_HOST_SYS[key])
+
+    return normalized
 
 
 def _get_backend() -> _ProfilerBackend:

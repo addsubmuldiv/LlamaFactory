@@ -357,8 +357,12 @@ class TorchProfilerCallback(TrainerCallback):
       profiler_record_shapes  – record tensor shapes (default: false; true for deprecated alias)
       profiler_profile_memory – profile memory usage (default: false; true for deprecated alias)
       profiler_with_stack     – record stack traces (default: false; true for deprecated alias)
-      profiler_activities     – auto, all, cpu, or device              (default: auto)
-      profiler_rank_mode      – all ranks or rank0 only                (default: all)
+      profiler_activities     – choices: auto, all, cpu, device        (default: auto)
+      profiler_rank_mode      – choices: all, rank0                    (default: all)
+      profiler_level          – choices: none, level0, level1, level2
+      profiler_aic_metrics    – choices: auto, none, pipe_utilization, arithmetic_utilization,
+                                memory, memory_l0, memory_ub, l2_cache, memory_access,
+                                resource_conflict_ratio
 
     Trace files (one per rank, Chrome / TensorBoard JSON format) are written to
     ``<profiler_output_dir>/rank_<N>/``.
@@ -369,6 +373,13 @@ class TorchProfilerCallback(TrainerCallback):
       profiler_warmup_steps: 1
       profiler_active_steps: 3
       profiler_rank_mode: rank0
+      profiler_level: level1
+      profiler_aic_metrics: pipe_utilization
+      profiler_backend_options:
+        npu:
+          host_sys: [cpu, mem]
+          sys_io: true
+          data_simplification: false
     """
 
     def __init__(self, training_args: "TrainingArguments") -> None:
