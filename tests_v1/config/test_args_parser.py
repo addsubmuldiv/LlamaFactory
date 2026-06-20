@@ -44,6 +44,11 @@ def test_get_args_from_yaml(tmp_path: Path):
         learning_rate: 1.0e-4
         bf16: false
         dist_config: null
+        enable_profiler: true
+        profiler_start_step: 10
+        profiler_warmup_steps: 1
+        profiler_active_steps: 2
+        profiler_rank_mode: rank0
 
         ### sample
         sample_backend: hf
@@ -69,4 +74,9 @@ def test_get_args_from_yaml(tmp_path: Path):
         assert training_args.learning_rate == 1.0e-4
         assert training_args.bf16 is False
         assert training_args.dist_config is None
+        assert training_args.enable_profiler is True
+        assert training_args.profiler_start_step == 10
+        assert training_args.profiler_warmup_steps == 1
+        assert training_args.profiler_active_steps == 2
+        assert training_args.profiler_rank_mode == "rank0"
         assert sample_args.sample_backend == "hf"

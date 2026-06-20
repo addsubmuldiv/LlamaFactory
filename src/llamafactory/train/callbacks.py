@@ -35,6 +35,7 @@ from ..extras import logging
 from ..extras.constants import TRAINER_LOG, V_HEAD_SAFE_WEIGHTS_NAME, V_HEAD_WEIGHTS_NAME
 from ..extras.misc import get_peak_memory, is_env_enabled, is_torch_cuda_available, is_torch_npu_available, use_ray
 from ..extras.packages import is_safetensors_available
+from ..extras.profiler import ProfilerController
 
 
 if is_safetensors_available():
@@ -341,16 +342,19 @@ class LogCallback(TrainerCallback):
 
 
 class TorchProfilerCallback(TrainerCallback):
-    r"""A callback for collecting torch.profiler traces during training.
+    r"""A callback for collecting CUDA/NPU profiler traces during training.
 
-    Activated by setting ``enable_torch_profiler: true`` in the YAML config.
+    Activated by setting ``enable_profiler: true`` in the YAML config.
+    ``enable_torch_profiler`` is still accepted for backward compatibility.
 
     Configuration fields (in YAML):
       profiler_output_dir     – where to write traces (default: <output_dir>/profiler)
+      profiler_start_step     – first optimizer step to actively record
       profiler_wait_steps     – steps to skip at start of each cycle (default: 1)
       profiler_warmup_steps   – profiler warm-up steps per cycle       (default: 1)
       profiler_active_steps   – steps to record per cycle              (default: 1)
       profiler_repeat         – number of cycles; 0 = forever          (default: 1)
+      profiler_interval_steps – distance between active window starts
       profiler_record_shapes  – record tensor shapes (default: true)
       profiler_profile_memory – profile memory usage (default: true)
       profiler_with_stack     – record stack traces (default: true)
@@ -360,74 +364,25 @@ class TorchProfilerCallback(TrainerCallback):
     """
 
     def __init__(self, training_args: "TrainingArguments") -> None:
-        self.profiler = None
-        self.profiler_args = training_args
-
-    @staticmethod
-    def _get_rank() -> int:
-        import torch.distributed as dist
-
-        if dist.is_available() and dist.is_initialized():
-            return dist.get_rank()
-        return 0
+        self.profiler = ProfilerController(training_args, logger=logger)
 
     @override
     def on_train_begin(
         self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs
     ) -> None:
-        if self.profiler is not None:
-            self.profiler.stop()
-            self.profiler = None
-
-        pa = self.profiler_args
-        output_dir = pa.profiler_output_dir or os.path.join(args.output_dir, "profiler")
-        rank = self._get_rank()
-        trace_dir = os.path.join(output_dir, f"rank_{rank}")
-        os.makedirs(trace_dir, exist_ok=True)
-
-        activities = [torch.profiler.ProfilerActivity.CPU]
-        try:
-            if is_torch_cuda_available():
-                activities.append(torch.profiler.ProfilerActivity.CUDA)
-            if is_torch_npu_available():
-                activities.append(torch.profiler.ProfilerActivity.NPU)
-        except Exception:
-            pass
-
-        self.profiler = torch.profiler.profile(
-            activities=activities,
-            schedule=torch.profiler.schedule(
-                wait=pa.profiler_wait_steps,
-                warmup=pa.profiler_warmup_steps,
-                active=pa.profiler_active_steps,
-                repeat=pa.profiler_repeat,
-            ),
-            on_trace_ready=torch.profiler.tensorboard_trace_handler(trace_dir),
-            record_shapes=pa.profiler_record_shapes,
-            profile_memory=pa.profiler_profile_memory,
-            with_stack=pa.profiler_with_stack,
-        )
-        self.profiler.start()
-        logger.info_rank0(
-            f"TorchProfiler started — schedule: wait={pa.profiler_wait_steps}, warmup={pa.profiler_warmup_steps}, "
-            f"active={pa.profiler_active_steps}, repeat={pa.profiler_repeat}. Traces → {output_dir}"
-        )
+        self.profiler.start(args.output_dir)
 
     @override
     def on_step_end(
         self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs
     ) -> None:
-        if self.profiler is not None:
-            self.profiler.step()
+        self.profiler.step()
 
     @override
     def on_train_end(
         self, args: "TrainingArguments", state: "TrainerState", control: "TrainerControl", **kwargs
     ) -> None:
-        if self.profiler is not None:
-            self.profiler.stop()
-            self.profiler = None
-            logger.info_rank0("TorchProfiler stopped.")
+        self.profiler.stop()
 
 
 class ReporterCallback(TrainerCallback):
