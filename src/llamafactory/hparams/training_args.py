@@ -68,13 +68,21 @@ class RayArguments:
 class ProfilerArguments:
     r"""Arguments for torch profiler configuration."""
 
+    enable_profiler: bool = field(
+        default=False,
+        metadata={"help": "Whether to enable profiler for collecting CPU/CUDA/NPU performance traces."},
+    )
     enable_torch_profiler: bool = field(
         default=False,
-        metadata={"help": "Whether to enable torch profiler for collecting performance traces."},
+        metadata={"help": "Deprecated. Use `enable_profiler` instead."},
     )
     profiler_output_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Directory to write profiler traces. Defaults to <output_dir>/profiler if not set."},
+    )
+    profiler_skip_first: int = field(
+        default=0,
+        metadata={"help": "Number of steps to skip before the first profiler wait/warmup/active cycle."},
     )
     profiler_wait_steps: int = field(
         default=1,
@@ -92,23 +100,39 @@ class ProfilerArguments:
         default=1,
         metadata={"help": "Number of profiling cycles. Set to 0 for continuous profiling."},
     )
-    profiler_record_shapes: bool = field(
-        default=True,
+    profiler_record_shapes: Optional[bool] = field(
+        default=None,
         metadata={"help": "Whether to record tensor shapes during profiling."},
     )
-    profiler_profile_memory: bool = field(
-        default=True,
+    profiler_profile_memory: Optional[bool] = field(
+        default=None,
         metadata={"help": "Whether to profile memory usage."},
     )
-    profiler_with_stack: bool = field(
-        default=True,
+    profiler_with_stack: Optional[bool] = field(
+        default=None,
         metadata={"help": "Whether to record stack traces during profiling."},
+    )
+    profiler_with_flops: bool = field(
+        default=False,
+        metadata={"help": "Whether to estimate FLOPs where supported by the profiler backend."},
+    )
+    profiler_with_modules: bool = field(
+        default=False,
+        metadata={"help": "Whether to record module hierarchy where supported by the profiler backend."},
+    )
+    profiler_activities: str = field(
+        default="auto",
+        metadata={"help": "Profiler activities to collect: auto, all, cpu, or device."},
+    )
+    profiler_rank_mode: str = field(
+        default="all",
+        metadata={"help": "Profiler rank collection mode: all or rank0."},
     )
     profile_modules: Optional[str] = field(
         default=None,
         metadata={
             "help": (
-                "Comma-separated list of module name patterns to profile with CUDA events. "
+                "Comma-separated list of module name patterns to profile with accelerator events. "
                 "Supports fnmatch wildcards (e.g. 'model.layers.0.self_attn,model.layers.*.mlp'). "
                 "Reports per-module forward/backward timing statistics at each logging step."
             )
