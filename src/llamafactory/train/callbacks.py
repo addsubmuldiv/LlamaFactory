@@ -344,8 +344,7 @@ class LogCallback(TrainerCallback):
 class TorchProfilerCallback(TrainerCallback):
     r"""A callback for collecting CPU/CUDA/NPU profiler traces during training.
 
-    Activated by setting ``enable_profiler: true`` in the YAML config.
-    ``enable_torch_profiler`` is still accepted for backward compatibility.
+    Activated by setting ``enable_torch_profiler: true`` in the YAML config.
 
     Configuration fields (in YAML):
       profiler_output_dir     – where to write traces (default: <output_dir>/profiler)
@@ -354,9 +353,9 @@ class TorchProfilerCallback(TrainerCallback):
       profiler_warmup_steps   – profiler warm-up steps per cycle       (default: 1)
       profiler_active_steps   – steps to record per cycle              (default: 1)
       profiler_repeat         – number of cycles; 0 = forever          (default: 1)
-      profiler_record_shapes  – record tensor shapes (default: false; true for deprecated alias)
-      profiler_profile_memory – profile memory usage (default: false; true for deprecated alias)
-      profiler_with_stack     – record stack traces (default: false; true for deprecated alias)
+      profiler_record_shapes  – record tensor shapes (default: true)
+      profiler_profile_memory – profile memory usage (default: true)
+      profiler_with_stack     – record stack traces (default: true)
       profiler_activities     – choices: auto, all, cpu, device        (default: auto)
       profiler_rank_mode      – choices: all, rank0                    (default: all)
       profiler_level          – choices: none, level0, level1, level2

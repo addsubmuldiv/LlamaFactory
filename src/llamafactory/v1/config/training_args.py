@@ -69,13 +69,9 @@ class TrainingArguments:
         default=True,
         metadata={"help": "Enable activation checkpointing for training."},
     )
-    enable_profiler: bool = field(
-        default=False,
-        metadata={"help": "Whether to enable profiler for collecting CPU/CUDA/NPU performance traces."},
-    )
     enable_torch_profiler: bool = field(
         default=False,
-        metadata={"help": "Deprecated. Use `enable_profiler` instead."},
+        metadata={"help": "Whether to enable torch profiler for collecting CPU/CUDA/NPU performance traces."},
     )
     profiler_output_dir: str | None = field(
         default=None,

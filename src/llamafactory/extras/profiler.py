@@ -77,15 +77,11 @@ class ProfilerConfig:
     level: str = "level0"
     aic_metrics: str = "auto"
     backend_options: Optional[dict[str, Any]] = None
-    deprecated_alias_present: bool = False
-    legacy_defaults_enabled: bool = False
     explicit_profile_kwargs: Optional[set[str]] = None
 
     @classmethod
     def from_args(cls, args: Any) -> "ProfilerConfig":
-        enable_profiler = bool(getattr(args, "enable_profiler", False))
         enable_torch_profiler = bool(getattr(args, "enable_torch_profiler", False))
-        legacy_defaults_enabled = enable_torch_profiler and not enable_profiler
         record_shapes = getattr(args, "profiler_record_shapes", None)
         profile_memory = getattr(args, "profiler_profile_memory", None)
         with_stack = getattr(args, "profiler_with_stack", None)
@@ -99,16 +95,16 @@ class ProfilerConfig:
         if getattr(args, "profiler_with_modules", False):
             explicit_profile_kwargs.add("with_modules")
         return cls(
-            enabled=enable_profiler or enable_torch_profiler,
+            enabled=enable_torch_profiler,
             output_dir=getattr(args, "profiler_output_dir", None),
             skip_first=getattr(args, "profiler_skip_first", 0),
             wait_steps=getattr(args, "profiler_wait_steps", 1),
             warmup_steps=getattr(args, "profiler_warmup_steps", 1),
             active_steps=getattr(args, "profiler_active_steps", 1),
             repeat=getattr(args, "profiler_repeat", 1),
-            record_shapes=_resolve_optional_bool(record_shapes, legacy_defaults_enabled),
-            profile_memory=_resolve_optional_bool(profile_memory, legacy_defaults_enabled),
-            with_stack=_resolve_optional_bool(with_stack, legacy_defaults_enabled),
+            record_shapes=_resolve_optional_bool(record_shapes, enable_torch_profiler),
+            profile_memory=_resolve_optional_bool(profile_memory, enable_torch_profiler),
+            with_stack=_resolve_optional_bool(with_stack, enable_torch_profiler),
             with_flops=getattr(args, "profiler_with_flops", False),
             with_modules=getattr(args, "profiler_with_modules", False),
             activities=getattr(args, "profiler_activities", "auto"),
@@ -116,8 +112,6 @@ class ProfilerConfig:
             level=getattr(args, "profiler_level", "level0"),
             aic_metrics=getattr(args, "profiler_aic_metrics", "auto"),
             backend_options=_parse_backend_options(getattr(args, "profiler_backend_options", None)),
-            deprecated_alias_present=enable_torch_profiler,
-            legacy_defaults_enabled=legacy_defaults_enabled,
             explicit_profile_kwargs=explicit_profile_kwargs,
         )
 
@@ -451,16 +445,6 @@ class ProfilerController:
         if not self.config.enabled:
             return
 
-        if self.config.deprecated_alias_present:
-            message = "`enable_torch_profiler` is deprecated; use `enable_profiler` instead."
-            if self.config.legacy_defaults_enabled:
-                message += " Legacy shape, memory, and stack profiling defaults are preserved for this alias."
-            _log(
-                self.logger,
-                "warning",
-                message,
-            )
-
         backend = _get_backend()
         self.backend_name = backend.name
         self.config.validate(backend.name)
@@ -468,7 +452,8 @@ class ProfilerController:
             _log(
                 self.logger,
                 "warning",
-                "`PROF_CONFIG_PATH` is set. Do not enable dynamic_profile together with `enable_profiler`.",
+                "`PROF_CONFIG_PATH` is set. Do not enable dynamic_profile together with "
+                "`enable_torch_profiler`.",
             )
         schedule = self.config.schedule_kwargs()
 

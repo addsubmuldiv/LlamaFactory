@@ -5,7 +5,7 @@
 LLaMA Factory can collect PyTorch profiler traces during training on CPU, CUDA GPU, and Ascend NPU devices. Enable it in the training YAML:
 
 ```yaml
-enable_profiler: true
+enable_torch_profiler: true
 profiler_output_dir: ./saves/profile
 profiler_skip_first: 8
 profiler_wait_steps: 0
@@ -32,7 +32,7 @@ profiler_backend_options:
 
 String enum values are fixed short values. `profiler_activities` supports `auto`, `all`, `cpu`, `device`; `profiler_rank_mode` supports `all`, `rank0`; `profiler_level` supports `none`, `level0`, `level1`, `level2`; `profiler_aic_metrics` supports `auto`, `none`, `pipe_utilization`, `arithmetic_utilization`, `memory`, `memory_l0`, `memory_ub`, `l2_cache`, `memory_access`, `resource_conflict_ratio`; `profiler_backend_options.npu.host_sys` supports `cpu`, `mem`, `disk`, `network`, `osrt`. Values outside these lists fail validation. `profiler_backend_options` must be a YAML mapping, not a JSON string.
 
-Do not enable Ascend `dynamic_profile` through `PROF_CONFIG_PATH` at the same time as `enable_profiler`.
+Do not enable Ascend `dynamic_profile` through `PROF_CONFIG_PATH` at the same time as `enable_torch_profiler`.
 
 Official references:
 

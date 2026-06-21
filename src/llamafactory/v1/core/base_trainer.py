@@ -125,7 +125,7 @@ class BaseTrainer:
 
         # Callbacks
         self.callback_handler = CallbackHandler([LoggingCallback()], trainer=self)
-        if getattr(self.args, "enable_profiler", False) or getattr(self.args, "enable_torch_profiler", False):
+        if getattr(self.args, "enable_torch_profiler", False):
             from ..accelerator.profiler import ProfilerCallback
 
             self.callback_handler.add_callback(ProfilerCallback(self.args))
