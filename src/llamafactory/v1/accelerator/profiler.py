@@ -17,17 +17,12 @@ import os
 import sys
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 import torch
 from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
 from ..utils import logging
-from ..utils.callbacks import TrainerCallback, TrainerState
-
-
-if TYPE_CHECKING:
-    from ..config import TrainingArguments
 
 
 logger = logging.get_logger(__name__)
@@ -525,17 +520,3 @@ class ProfilerController:
 
         profiler.stop()
         _log(self.logger, "info", "Profiler stopped.")
-
-
-class ProfilerCallback(TrainerCallback):
-    def __init__(self, args: "TrainingArguments") -> None:
-        self.profiler = ProfilerController(args, logger=logger)
-
-    def on_train_begin(self, args: "TrainingArguments", state: TrainerState, **kwargs: Any) -> None:
-        self.profiler.start(args.output_dir, initial_step=state.global_step)
-
-    def on_step_end(self, args: "TrainingArguments", state: TrainerState, **kwargs: Any) -> None:
-        self.profiler.step()
-
-    def on_train_end(self, args: "TrainingArguments", state: TrainerState, **kwargs: Any) -> None:
-        self.profiler.stop()
