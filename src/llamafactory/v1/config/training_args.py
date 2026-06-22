@@ -99,15 +99,15 @@ class TrainingArguments:
     )
     profiler_record_shapes: bool | None = field(
         default=None,
-        metadata={"help": "Whether to record tensor shapes during profiling."},
+        metadata={"help": "Whether to record tensor shapes during profiling.", "nargs": "?", "const": True},
     )
     profiler_profile_memory: bool | None = field(
         default=None,
-        metadata={"help": "Whether to profile memory usage."},
+        metadata={"help": "Whether to profile memory usage.", "nargs": "?", "const": True},
     )
     profiler_with_stack: bool | None = field(
         default=None,
-        metadata={"help": "Whether to record stack traces during profiling."},
+        metadata={"help": "Whether to record stack traces during profiling.", "nargs": "?", "const": True},
     )
     profiler_with_flops: bool = field(
         default=False,
