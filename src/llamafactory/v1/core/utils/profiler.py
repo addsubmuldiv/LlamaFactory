@@ -22,7 +22,7 @@ from typing import Any, Optional
 import torch
 from transformers.utils import is_torch_cuda_available, is_torch_npu_available
 
-from ..utils import logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

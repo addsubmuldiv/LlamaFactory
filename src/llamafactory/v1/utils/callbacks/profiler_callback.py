@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...accelerator.profiler import ProfilerController
+from ...core.utils.profiler import ProfilerController
 from .. import logging
 from .trainer_callback import TrainerCallback, TrainerState
 
